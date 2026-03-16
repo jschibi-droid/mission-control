@@ -1,0 +1,13 @@
+# docker-compose.openclaw.yml — Override for local OpenClaw gateway
+# Usage: docker compose -f docker-compose.yml -f docker-compose.openclaw.yml up -d
+services:
+  mission-control:
+    ports:
+      - "3001:${PORT:-3000}"  # Use 3001 to avoid conflict with dev server
+    volumes:
+      - mc-data:/app/.data
+      - /Users/Axel_Claw/.openclaw:/run/openclaw:ro
+    environment:
+      - OPENCLAW_HOME=/run/openclaw
+      - OPENCLAW_GATEWAY_HOST=host-gateway
+      - OPENCLAW_GATEWAY_PORT=18789
