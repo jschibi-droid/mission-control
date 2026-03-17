@@ -1,16 +1,15 @@
-# docker-compose.openclaw.yml — Override for local OpenClaw gateway
-# Usage: docker compose -f docker-compose.yml -f docker-compose.openclaw.yml up -d
 services:
   mission-control:
-    ports:
-      - "3001:${PORT:-3000}"  # Use 3001 to avoid conflict with dev server
     volumes:
-      - mc-data:/app/.data
-      - /Users/Axel_Claw/.openclaw:/run/openclaw:ro
-    env_file:
-      - /Users/Axel_Claw/.openclaw/.env
+      # Mount host openclaw state for config, identity, and agent data
+      - ${OPENCLAW_HOME:-~/.openclaw}:/run/openclaw:ro
+      # Mount the openclaw module for direct in-process gateway RPC.
+      # Symlinked from ~/.openclaw/node_modules/openclaw → /opt/homebrew/lib/node_modules/openclaw
+      # so Docker Desktop can access it (auto-shares /Users/ on macOS).
+      - ${HOME}/.openclaw/node_modules/openclaw:/usr/local/lib/node_modules/openclaw:ro
     environment:
       - OPENCLAW_HOME=/run/openclaw
       - OPENCLAW_GATEWAY_HOST=host.docker.internal
       - OPENCLAW_GATEWAY_PORT=18789
-
+      # Direct module import for gateway RPC (no CLI subprocess needed)
+      - OPENCLAW_MODULE_DIR=/usr/local/lib/node_modules/openclaw
