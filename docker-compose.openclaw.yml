@@ -7,7 +7,10 @@ services:
     volumes:
       - mc-data:/app/.data
       - /Users/Axel_Claw/.openclaw:/run/openclaw:ro
+    env_file:
+      - /Users/Axel_Claw/.openclaw/.env
     environment:
       - OPENCLAW_HOME=/run/openclaw
       - OPENCLAW_GATEWAY_HOST=host-gateway
       - OPENCLAW_GATEWAY_PORT=18789
+
