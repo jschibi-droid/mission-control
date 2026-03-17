@@ -28,8 +28,13 @@ export function getDatabase(): Database.Database {
     // Enable WAL mode for better concurrent access
     db.pragma('journal_mode = WAL');
     db.pragma('synchronous = NORMAL');
-    db.pragma('cache_size = 1000');
+    // Use negative value to specify KB: -8000 = 8 MB page cache (default 1000 pages ≈ 4 MB)
+    db.pragma('cache_size = -8000');
     db.pragma('foreign_keys = ON');
+    // Keep temp tables/indexes in RAM instead of disk
+    db.pragma('temp_store = MEMORY');
+    // Memory-map up to 256 MB of the DB file for faster reads
+    db.pragma('mmap_size = 268435456');
     // Retry for up to 5 s before throwing SQLITE_BUSY; prevents contention
     // errors under concurrent Next.js route-handler requests.
     db.pragma('busy_timeout = 5000');
@@ -68,6 +73,11 @@ function initializeSchema() {
           initScheduler();
         }).catch(() => {
           // Silent - scheduler is optional
+        });
+        import('./gateway-events').then(({ initGatewayEventListener }) => {
+          initGatewayEventListener();
+        }).catch((err) => {
+          logger.error({ err }, 'Failed to initialize Gateway event listener');
         });
       }
     }

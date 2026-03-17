@@ -595,6 +595,9 @@ interface MissionControlStore {
   setHeaderDensity: (mode: 'focus' | 'compact') => void
 }
 
+// Module-level Set for O(1) log dedup (kept in sync with store.logs)
+const logIdSet = new Set<string>()
+
 export const useMissionControl = create<MissionControlStore>()(
   subscribeWithSelector((set, get) => ({
     // Dashboard Mode
@@ -687,18 +690,17 @@ export const useMissionControl = create<MissionControlStore>()(
     logFilters: {},
     addLog: (log) =>
       set((state) => {
-        // Check if log already exists to prevent duplicates
-        const existingLogIndex = state.logs.findIndex(existingLog => existingLog.id === log.id)
-        if (existingLogIndex !== -1) {
-          // Update existing log
-          const updatedLogs = [...state.logs]
-          updatedLogs[existingLogIndex] = log
-          return { logs: updatedLogs }
+        // O(1) dedup using ID set maintained alongside the logs array
+        if (logIdSet.has(log.id)) {
+          // Update existing log in-place
+          return { logs: state.logs.map(l => l.id === log.id ? log : l) }
         }
         // Add new log at the beginning (newest first)
-        return {
-          logs: [log, ...state.logs].slice(0, 1000), // Keep last 1000 logs
-        }
+        const logs = [log, ...state.logs].slice(0, 1000) // Keep last 1000 logs
+        // Rebuild ID set from the capped array to stay in sync
+        logIdSet.clear()
+        for (const l of logs) logIdSet.add(l.id)
+        return { logs }
       }),
     setLogFilters: (filters) =>
       set((state) => ({
