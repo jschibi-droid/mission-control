@@ -11,6 +11,6 @@ services:
       - /Users/Axel_Claw/.openclaw/.env
     environment:
       - OPENCLAW_HOME=/run/openclaw
-      - OPENCLAW_GATEWAY_HOST=host-gateway
+      - OPENCLAW_GATEWAY_HOST=host.docker.internal
       - OPENCLAW_GATEWAY_PORT=18789
 
