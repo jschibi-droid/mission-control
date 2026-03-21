@@ -1,5 +1,5 @@
 import type { Phase1AViewModel } from '@/lib/phase1a-data'
-import { buildPhase1aHref, getAlertActivity } from '@/lib/phase1a-data'
+import { buildPhase1aHref, getAlertActivity, getRunSession, getThreadById } from '@/lib/phase1a-data'
 import { CardHeader, DefinitionList, PhaseCard, SelectionLink, StatusBadge, formatTimestamp } from './primitives'
 
 export function HealthView({ model }: { model: Phase1AViewModel }) {
@@ -7,11 +7,13 @@ export function HealthView({ model }: { model: Phase1AViewModel }) {
   if (!selectedAlert) return null
 
   const relatedActivity = getAlertActivity(selectedAlert.id)
+  const session = selectedAlert.runId ? getRunSession(selectedAlert.runId) : null
+  const thread = selectedAlert.threadId ? getThreadById(selectedAlert.threadId) : null
 
   return (
     <div className="grid gap-6 xl:grid-cols-[0.88fr_1.12fr]">
       <PhaseCard>
-        <CardHeader eyebrow="Health" title="Open signals" detail={`${model.alerts.length} mocked alerts`} />
+        <CardHeader eyebrow="Health" title="Open signals" detail={`${model.alerts.length} visible`} />
         <div className="grid gap-3 p-5">
           {model.alerts.map((alert) => (
             <SelectionLink
@@ -55,6 +57,29 @@ export function HealthView({ model }: { model: Phase1AViewModel }) {
         <PhaseCard>
           <CardHeader eyebrow="Related activity" title="Operational timeline" detail={`${relatedActivity.length} events`} />
           <div className="grid gap-3 p-5">
+            {selectedAlert.runId ? (
+              <SelectionLink
+                href={buildPhase1aHref('runs', { key: 'run', value: selectedAlert.runId })}
+                title="Open linked run"
+                meta={selectedAlert.runId}
+              />
+            ) : null}
+            {session ? (
+              <SelectionLink
+                href={buildPhase1aHref('runs', { key: 'session', value: session.id })}
+                title={session.label}
+                meta={`${session.kind} • ${session.state}`}
+                badge={<StatusBadge tone={session.state === 'streaming' ? 'active' : session.state === 'watching' ? 'info' : 'neutral'}>{session.state}</StatusBadge>}
+              />
+            ) : null}
+            {thread ? (
+              <SelectionLink
+                href={buildPhase1aHref('threads', { key: 'thread', value: thread.id })}
+                title={thread.title}
+                meta={`${thread.channel} • inspect only`}
+                badge={<StatusBadge tone={thread.state === 'live' ? 'active' : thread.state === 'watch' ? 'info' : 'neutral'}>{thread.state}</StatusBadge>}
+              />
+            ) : null}
             {relatedActivity.map((event) => (
               <div key={event.id} className="rounded-xl border border-border/70 bg-background/20 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -62,6 +87,7 @@ export function HealthView({ model }: { model: Phase1AViewModel }) {
                   <StatusBadge tone={event.severity === 'critical' ? 'critical' : event.severity === 'warning' ? 'warning' : 'neutral'}>{event.severity}</StatusBadge>
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">{event.kind} • {event.actor} • {formatTimestamp(event.at)}</div>
+                <div className="mt-2 text-xs text-primary/80">{event.motion}</div>
                 <p className="mt-2 text-sm leading-6 text-foreground/85">{event.description}</p>
               </div>
             ))}
@@ -71,4 +97,3 @@ export function HealthView({ model }: { model: Phase1AViewModel }) {
     </div>
   )
 }
-
