@@ -9,19 +9,21 @@ export function OverviewView({ model }: { model: Phase1AViewModel }) {
       <PhaseCard className="void-bg">
         <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.35fr_0.65fr]">
           <div>
-            <div className="text-2xs uppercase tracking-[0.2em] text-primary/80">Mission Control Phase 1A</div>
+            <div className="text-2xs uppercase tracking-[0.2em] text-primary/80">Mission Control Packet 2</div>
             <h1 className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight text-foreground">
-              A reviewable control surface for runs, artifacts, health, and activity.
+              A reviewable control surface for runs, agents, artifacts, health, activity, and threads.
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-              This surface is intentionally narrow. It highlights active work, operational risk, and the mocked data
-              needed to review the UI before any real integrations exist.
+              This surface stays intentionally narrow. It highlights active work, operational risk, and inspect-only
+              operational context without adding control-heavy systems.
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <MetricTile label="Active runs" value={String(model.stats.activeRuns)} detail="Currently executing" />
               <MetricTile label="Blocked runs" value={String(model.stats.blockedRuns)} detail="Needs intervention" />
               <MetricTile label="Critical alerts" value={String(model.stats.criticalAlerts)} detail="Open now" />
               <MetricTile label="Artifacts to review" value={String(model.stats.reviewArtifacts)} detail="Pending decisions" />
+              <MetricTile label="Visible agents" value={String(model.stats.engagedAgents)} detail="Engaged or monitoring" />
+              <MetricTile label="Live threads" value={String(model.stats.liveThreads)} detail="Read-only operator watch" />
             </div>
           </div>
           <div className="rounded-2xl border border-primary/20 bg-background/45 p-5">
@@ -89,6 +91,38 @@ export function OverviewView({ model }: { model: Phase1AViewModel }) {
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <PhaseCard>
+          <CardHeader eyebrow="Agents" title="Who is carrying live context" detail="Operator visibility only" />
+          <div className="grid gap-3 p-5">
+            {model.agents.slice(0, 4).map((agent) => (
+              <SelectionLink
+                key={agent.id}
+                href={buildPhase1aHref('agents', { key: 'agent', value: agent.id })}
+                title={agent.name}
+                meta={`${agent.role} • ${agent.focus}`}
+                badge={<StatusBadge tone={agent.status === 'engaged' ? 'active' : agent.status === 'monitoring' ? 'info' : 'neutral'}>{agent.status}</StatusBadge>}
+              />
+            ))}
+          </div>
+        </PhaseCard>
+
+        <PhaseCard>
+          <CardHeader eyebrow="Threads" title="Read-only chat visibility" detail="Operationally useful conversations" />
+          <div className="grid gap-3 p-5">
+            {model.threads.slice(0, 4).map((thread) => (
+              <SelectionLink
+                key={thread.id}
+                href={buildPhase1aHref('threads', { key: 'thread', value: thread.id })}
+                title={thread.title}
+                meta={`${thread.channel} • ${thread.participantLabels.join(', ')} • ${formatTimestamp(thread.lastMessageAt)}`}
+                badge={<StatusBadge tone={thread.state === 'live' ? 'active' : thread.state === 'watch' ? 'info' : 'neutral'}>{thread.state}</StatusBadge>}
+              />
+            ))}
+          </div>
+        </PhaseCard>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+        <PhaseCard>
           <CardHeader eyebrow="Artifacts" title="Outputs awaiting attention" detail="Review and freshness" />
           <div className="grid gap-3 p-5">
             {model.artifacts.slice(0, 4).map((artifact) => (
@@ -121,4 +155,3 @@ export function OverviewView({ model }: { model: Phase1AViewModel }) {
     </div>
   )
 }
-

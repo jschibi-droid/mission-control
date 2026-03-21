@@ -1,5 +1,5 @@
 import type { Phase1AViewModel } from '@/lib/phase1a-data'
-import { buildPhase1aHref, getArtifactRun } from '@/lib/phase1a-data'
+import { buildPhase1aHref, getAgentById, getArtifactRun, getSessionById, getThreadById } from '@/lib/phase1a-data'
 import { CardHeader, DefinitionList, PhaseCard, SelectionLink, StatusBadge, formatTimestamp } from './primitives'
 
 export function ActivityView({ model }: { model: Phase1AViewModel }) {
@@ -7,11 +7,14 @@ export function ActivityView({ model }: { model: Phase1AViewModel }) {
   if (!selectedEvent) return null
 
   const relatedRun = selectedEvent.runId ? getArtifactRun(selectedEvent.runId) : null
+  const relatedAgent = selectedEvent.agentId ? getAgentById(selectedEvent.agentId) : null
+  const relatedSession = selectedEvent.sessionId ? getSessionById(selectedEvent.sessionId) : null
+  const relatedThread = selectedEvent.threadId ? getThreadById(selectedEvent.threadId) : null
 
   return (
     <div className="grid gap-6 xl:grid-cols-[0.88fr_1.12fr]">
       <PhaseCard>
-        <CardHeader eyebrow="Activity" title="Recent events" detail={`${model.activity.length} mocked events`} />
+        <CardHeader eyebrow="Activity" title="Recent events" detail={`${model.activity.length} visible`} />
         <div className="grid gap-3 p-5">
           {model.activity.map((event) => (
             <SelectionLink
@@ -41,6 +44,7 @@ export function ActivityView({ model }: { model: Phase1AViewModel }) {
                 { label: 'Kind', value: selectedEvent.kind },
                 { label: 'Actor', value: selectedEvent.actor },
                 { label: 'Linked run', value: relatedRun ? relatedRun.name : 'None' },
+                { label: 'Movement', value: selectedEvent.motion },
                 { label: 'Linked alert', value: selectedEvent.alertId ?? 'None' },
               ]}
             />
@@ -94,6 +98,27 @@ export function ActivityView({ model }: { model: Phase1AViewModel }) {
                   meta={selectedEvent.runId}
                 />
               ) : null}
+              {relatedAgent ? (
+                <SelectionLink
+                  href={buildPhase1aHref('agents', { key: 'agent', value: relatedAgent.id })}
+                  title="Open agent"
+                  meta={`${relatedAgent.name} • ${relatedAgent.role}`}
+                />
+              ) : null}
+              {relatedThread ? (
+                <SelectionLink
+                  href={buildPhase1aHref('threads', { key: 'thread', value: relatedThread.id })}
+                  title="Open thread"
+                  meta={`${relatedThread.channel} • ${relatedThread.state}`}
+                />
+              ) : null}
+              {relatedSession ? (
+                <SelectionLink
+                  href={buildPhase1aHref('runs', { key: 'session', value: relatedSession.id })}
+                  title="Open session-backed run detail"
+                  meta={`${relatedSession.label} • ${relatedSession.kind}`}
+                />
+              ) : null}
             </div>
           </PhaseCard>
         </div>
@@ -101,4 +126,3 @@ export function ActivityView({ model }: { model: Phase1AViewModel }) {
     </div>
   )
 }
-
