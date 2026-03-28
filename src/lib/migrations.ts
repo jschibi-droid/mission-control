@@ -1284,6 +1284,16 @@ const migrations: Migration[] = [
         update.run(hashed, row.id)
       }
     }
+  },
+  {
+    id: '044_agents_working_memory',
+    up(db: Database.Database) {
+      const columns = db.prepare(`PRAGMA table_info(agents)`).all() as Array<{ name: string }>
+      const existing = new Set(columns.map((c) => c.name))
+      if (!existing.has('working_memory')) {
+        db.exec(`ALTER TABLE agents ADD COLUMN working_memory TEXT NOT NULL DEFAULT ''`)
+      }
+    }
   }
 ]
 

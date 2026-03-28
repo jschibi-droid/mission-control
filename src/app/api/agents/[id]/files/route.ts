@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, resolve } from 'node:path'
 import { resolveWithin } from '@/lib/paths'
 import { getAgentWorkspaceCandidates, readAgentWorkspaceFile } from '@/lib/agent-workspace'
+import { ensureWorkingMemoryColumn } from '@/lib/agent-memory'
 import { logger } from '@/lib/logger'
 
 const ALLOWED_FILES = new Set([
@@ -131,6 +132,7 @@ export async function PUT(
         .run(content, agent.id, workspaceId)
     }
     if (file === 'WORKING.md') {
+      ensureWorkingMemoryColumn(db)
       db.prepare('UPDATE agents SET working_memory = ?, updated_at = unixepoch() WHERE id = ? AND workspace_id = ?')
         .run(content, agent.id, workspaceId)
     }
