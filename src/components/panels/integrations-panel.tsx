@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
+import { GoogleWorkspaceHub } from '@/components/widgets/google-workspace-hub'
 
 interface EnvVarInfo {
   redacted: string
@@ -370,6 +371,11 @@ export function IntegrationsPanel() {
           </div>
         )}
       </div>
+
+      {/* Google Workspace Hub — show when GWS is connected in this category */}
+      {filteredIntegrations.some(i => i.id === 'google_workspace' && i.status === 'connected') && (
+        <GoogleWorkspaceHub />
+      )}
 
       {/* Unsaved changes bar */}
       {hasChanges && (

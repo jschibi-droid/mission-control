@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDatabase, db_helpers } from '@/lib/db'
+import { getDatabase } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
-import { validateBody, qualityReviewSchema } from '@/lib/validation'
-import { mutationLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
-import { eventBus } from '@/lib/event-bus'
 
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'viewer')
@@ -71,64 +68,22 @@ export async function POST(request: NextRequest) {
   const auth = requireRole(request, 'operator')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
-  const rateCheck = mutationLimiter(request)
-  if (rateCheck) return rateCheck
-
   try {
-    const validated = await validateBody(request, qualityReviewSchema)
-    if ('error' in validated) return validated.error
-    const { taskId, reviewer, status, notes } = validated.data
+    const body = await request.json()
+    const origin = new URL(request.url).origin
+    const res = await fetch(`${origin}/api/agents/evals`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        cookie: request.headers.get('cookie') || '',
+      },
+      body: JSON.stringify({ ...body, action: 'task-review' }),
+    })
 
-    const db = getDatabase()
-    const workspaceId = auth.user.workspace_id ?? 1;
-
-    const task = db
-      .prepare('SELECT id, title FROM tasks WHERE id = ? AND workspace_id = ?')
-      .get(taskId, workspaceId) as any
-    if (!task) {
-      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
-    }
-
-    const result = db.prepare(`
-      INSERT INTO quality_reviews (task_id, reviewer, status, notes, workspace_id)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(taskId, reviewer, status, notes, workspaceId)
-
-    db_helpers.logActivity(
-      'quality_review',
-      'task',
-      taskId,
-      reviewer,
-      `Quality review ${status} for task: ${task.title}`,
-      { status, notes },
-      workspaceId
-    )
-
-    // Auto-advance task based on review outcome
-    if (status === 'approved') {
-      db.prepare('UPDATE tasks SET status = ?, updated_at = unixepoch() WHERE id = ? AND workspace_id = ?')
-        .run('done', taskId, workspaceId)
-      eventBus.broadcast('task.status_changed', {
-        id: taskId,
-        status: 'done',
-        previous_status: 'review',
-        updated_at: Math.floor(Date.now() / 1000),
-      })
-    } else if (status === 'rejected') {
-      // Rejected: push back to in_progress with the rejection notes as error_message
-      db.prepare('UPDATE tasks SET status = ?, error_message = ?, updated_at = unixepoch() WHERE id = ? AND workspace_id = ?')
-        .run('in_progress', `Quality review rejected by ${reviewer}: ${notes}`, taskId, workspaceId)
-      eventBus.broadcast('task.status_changed', {
-        id: taskId,
-        status: 'in_progress',
-        previous_status: 'review',
-        updated_at: Math.floor(Date.now() / 1000),
-      })
-    }
-
-    return NextResponse.json({ success: true, id: result.lastInsertRowid })
+    const data = await res.json().catch(() => ({ error: 'Invalid response from /api/agents/evals' }))
+    return NextResponse.json(data, { status: res.status })
   } catch (error) {
-    logger.error({ err: error }, 'POST /api/quality-review error')
-    return NextResponse.json({ error: 'Failed to create quality review' }, { status: 500 })
+    logger.error({ err: error }, 'POST /api/quality-review proxy error')
+    return NextResponse.json({ error: 'Failed to proxy quality review to /api/agents/evals' }, { status: 500 })
   }
 }

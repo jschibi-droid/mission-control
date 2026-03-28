@@ -4,7 +4,7 @@ import { logAuditEvent } from '@/lib/db'
 import { config } from '@/lib/config'
 import { join } from 'path'
 import { readFile, writeFile, rename } from 'fs/promises'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import os from 'os'
 import { execFileSync } from 'child_process'
 import { validateBody, integrationActionSchema } from '@/lib/validation'
@@ -35,6 +35,8 @@ interface IntegrationProbeSnapshot {
   ollamaInstalled: boolean
   ollamaReachable: boolean
   gwsInstalled: boolean
+  gwsAuthenticated: boolean
+  gwsAccount: string
 }
 
 let integrationProbeCache: { ts: number; value: IntegrationProbeSnapshot } | null = null
@@ -261,12 +263,39 @@ async function getIntegrationProbeSnapshot(): Promise<IntegrationProbeSnapshot> 
     return integrationProbeCache.value
   }
 
+  const gwsInstalled = checkCommandAvailable('gws')
+  let gwsAuthenticated = false
+  let gwsAccount = ''
+  if (gwsInstalled) {
+    // NOTE: Do NOT call `gws auth status` here — it blocks on macOS keyring
+    // in non-interactive Node.js processes.  Instead detect auth by checking
+    // the gws config directory for credential artefacts.
+    try {
+      const gwsDir = join(os.homedir(), '.config', 'gws')
+      const hasCredentials = existsSync(join(gwsDir, 'credentials.enc'))
+      const hasTokenCache = existsSync(join(gwsDir, 'token_cache.json'))
+      const hasKey = existsSync(join(gwsDir, '.encryption_key'))
+      if (hasCredentials && hasTokenCache && hasKey) {
+        gwsAuthenticated = true
+        // Try to read client_secret.json for the project info
+        try {
+          const cs = JSON.parse(readFileSync(join(gwsDir, 'client_secret.json'), 'utf-8'))
+          gwsAccount = cs?.installed?.project_id || cs?.web?.project_id || 'gws authenticated'
+        } catch {
+          gwsAccount = 'gws authenticated'
+        }
+      }
+    } catch { /* fs access failed */ }
+  }
+
   const value: IntegrationProbeSnapshot = {
     opAvailable: checkOpAvailable(),
     xint: checkXintState(),
     ollamaInstalled: checkCommandAvailable('ollama'),
     ollamaReachable: await checkOllamaReachable(),
-    gwsInstalled: checkCommandAvailable('gws'),
+    gwsInstalled,
+    gwsAuthenticated,
+    gwsAccount,
   }
   integrationProbeCache = { ts: now, value }
   return value
@@ -325,7 +354,7 @@ export async function GET(request: NextRequest) {
   }
 
   const probe = await getIntegrationProbeSnapshot()
-  const { opAvailable, xint, ollamaInstalled, ollamaReachable, gwsInstalled } = probe
+  const { opAvailable, xint, ollamaInstalled, ollamaReachable, gwsInstalled, gwsAuthenticated, gwsAccount } = probe
   const providerSubscriptions = detectProviderSubscriptions()
 
   // Merge plugin integrations and categories
@@ -415,7 +444,11 @@ export async function GET(request: NextRequest) {
     // Google Workspace CLI detection
     if (def.id === 'google_workspace' && !anySet) {
       const primaryVar = def.envVars[0]
-      if (gwsInstalled) {
+      if (gwsAuthenticated) {
+        vars[primaryVar] = { redacted: gwsAccount || 'gws authenticated', set: true }
+        allSet = true
+        anySet = true
+      } else if (gwsInstalled) {
         vars[primaryVar] = { redacted: 'gws CLI installed (run `gws auth login`)', set: true }
         allSet = false
         anySet = true

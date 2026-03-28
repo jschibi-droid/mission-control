@@ -11,6 +11,8 @@ import {
   getDriftTimeline,
   type EvalResult,
 } from '@/lib/agent-evals'
+import { eventBus } from '@/lib/event-bus'
+import { qualityReviewSchema } from '@/lib/validation'
 
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'operator')
@@ -86,6 +88,79 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { action } = body
+
+    if (action === 'task-review') {
+      const auth = requireRole(request, 'operator')
+      if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
+
+      const rateCheck = mutationLimiter(request)
+      if (rateCheck) return rateCheck
+
+      const parsed = qualityReviewSchema.safeParse(body)
+      if (!parsed.success) {
+        return NextResponse.json(
+          {
+            error: 'Validation failed',
+            details: parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`),
+          },
+          { status: 400 }
+        )
+      }
+
+      const { taskId, reviewer, status, notes } = parsed.data
+      const workspaceId = auth.user.workspace_id ?? 1
+      const db = getDatabase()
+
+      const task = db
+        .prepare('SELECT id, title, status FROM tasks WHERE id = ? AND workspace_id = ?')
+        .get(taskId, workspaceId) as { id: number; title: string; status: string } | undefined
+
+      if (!task) {
+        return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+      }
+
+      db.prepare(`
+        INSERT INTO quality_reviews (task_id, reviewer, status, notes, workspace_id)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(taskId, reviewer, status, notes, workspaceId)
+
+      logger.info({ taskId, reviewer, status }, 'Task quality review recorded via /api/agents/evals')
+
+      if (status === 'approved') {
+        db.prepare(`
+          UPDATE tasks
+          SET status = 'done', completed_at = COALESCE(completed_at, unixepoch()), updated_at = unixepoch()
+          WHERE id = ? AND workspace_id = ?
+        `).run(taskId, workspaceId)
+
+        eventBus.broadcast('task.status_changed', {
+          id: taskId,
+          status: 'done',
+          previous_status: task.status,
+          updated_at: Math.floor(Date.now() / 1000),
+        })
+      } else {
+        db.prepare(`
+          UPDATE tasks
+          SET status = 'in_progress', error_message = ?, updated_at = unixepoch()
+          WHERE id = ? AND workspace_id = ?
+        `).run(`Quality review rejected by ${reviewer}: ${notes}`, taskId, workspaceId)
+
+        db.prepare(`
+          INSERT INTO comments (task_id, author, content, created_at, workspace_id)
+          VALUES (?, ?, ?, unixepoch(), ?)
+        `).run(taskId, reviewer, `Quality Review Rejected:\n${notes}`, workspaceId)
+
+        eventBus.broadcast('task.status_changed', {
+          id: taskId,
+          status: 'in_progress',
+          previous_status: task.status,
+          updated_at: Math.floor(Date.now() / 1000),
+        })
+      }
+
+      return NextResponse.json({ success: true, taskId, reviewer, status })
+    }
 
     if (action === 'run') {
       const auth = requireRole(request, 'operator')

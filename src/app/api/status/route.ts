@@ -85,25 +85,45 @@ async function getMemorySnapshot() {
   let availableBytes = os.freemem()
 
   if (process.platform === 'darwin') {
+    // Prefer `memory_pressure` which reports the kernel's own free percentage.
+    // This accounts for compressor-reclaimable, cached, and purgeable memory —
+    // vm_stat's free+inactive+speculative+purgeable misses compressor pages and
+    // over-reports usage by 15-25 percentage points on systems with active compression.
+    let gotPressure = false
     try {
-      const { stdout } = await runCommand('vm_stat', [], { timeoutMs: 3000 })
-      const pageSizeMatch = stdout.match(/page size of (\d+) bytes/i)
-      const pageSize = parseInt(pageSizeMatch?.[1] || '4096', 10)
-      const pageLabels = ['Pages free', 'Pages inactive', 'Pages speculative', 'Pages purgeable']
-
-      const availablePages = pageLabels.reduce((sum, label) => {
-        const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        const match = stdout.match(new RegExp(`${escapedLabel}:\\s+([\\d.]+)`, 'i'))
-        const pages = parseInt((match?.[1] || '0').replace(/\./g, ''), 10)
-        return sum + (Number.isFinite(pages) ? pages : 0)
-      }, 0)
-
-      const vmAvailableBytes = availablePages * pageSize
-      if (vmAvailableBytes > 0) {
-        availableBytes = Math.min(vmAvailableBytes, totalBytes)
+      const { stdout: mpOut } = await runCommand('memory_pressure', [], { timeoutMs: 3000 })
+      const freePctMatch = mpOut.match(/free percentage:\s*(\d+)%/i)
+      if (freePctMatch) {
+        const freePercent = parseInt(freePctMatch[1], 10)
+        if (Number.isFinite(freePercent) && freePercent >= 0 && freePercent <= 100) {
+          availableBytes = Math.round(totalBytes * (freePercent / 100))
+          gotPressure = true
+        }
       }
-    } catch {
-      // Fall back to os.freemem()
+    } catch { /* memory_pressure unavailable */ }
+
+    // Fallback: vm_stat (less accurate — doesn't count compressor-reclaimable memory)
+    if (!gotPressure) {
+      try {
+        const { stdout } = await runCommand('vm_stat', [], { timeoutMs: 3000 })
+        const pageSizeMatch = stdout.match(/page size of (\d+) bytes/i)
+        const pageSize = parseInt(pageSizeMatch?.[1] || '4096', 10)
+        const pageLabels = ['Pages free', 'Pages inactive', 'Pages speculative', 'Pages purgeable']
+
+        const availablePages = pageLabels.reduce((sum, label) => {
+          const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          const match = stdout.match(new RegExp(`${escapedLabel}:\\s+([\\d.]+)`, 'i'))
+          const pages = parseInt((match?.[1] || '0').replace(/\./g, ''), 10)
+          return sum + (Number.isFinite(pages) ? pages : 0)
+        }, 0)
+
+        const vmAvailableBytes = availablePages * pageSize
+        if (vmAvailableBytes > 0) {
+          availableBytes = Math.min(vmAvailableBytes, totalBytes)
+        }
+      } catch {
+        // Fall back to os.freemem()
+      }
     }
   } else {
     try {

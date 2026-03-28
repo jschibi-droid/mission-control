@@ -71,6 +71,7 @@ const endpoints: Endpoint[] = [
 
   // ── Webhooks ──────────────────────────────────────
   { path: '/api/webhooks', methods: ['GET', 'POST', 'PATCH', 'DELETE'], description: 'Webhook CRUD', tag: 'Webhooks', auth: 'viewer/operator' },
+  { path: '/api/webhooks/n8n', methods: ['POST'], description: 'Create an n8n task-dispatch webhook bridge', tag: 'Webhooks', auth: 'admin' },
   { path: '/api/webhooks/deliveries', methods: ['GET'], description: 'Webhook delivery history', tag: 'Webhooks', auth: 'viewer' },
   { path: '/api/webhooks/retry', methods: ['POST'], description: 'Retry webhook delivery', tag: 'Webhooks', auth: 'operator' },
   { path: '/api/webhooks/test', methods: ['POST'], description: 'Send test webhook', tag: 'Webhooks', auth: 'operator' },
@@ -163,7 +164,8 @@ const payload = {
   total_endpoints: endpoints.length,
   endpoints,
   event_stream: {
-    path: '/api/events',
+    path: '/api/stream',
+    alias_of: '/api/events',
     protocol: 'SSE',
     description: 'Real-time server-sent events for tasks, agents, chat, and activity updates',
   },

@@ -306,8 +306,10 @@ function scanOpenClaw(): Category {
   } catch { /* skip */ }
 
   const gwAuth = ocConfig?.gateway?.auth
-  const tokenOk = gwAuth?.mode === 'token' && (gwAuth?.token ?? '').trim().length > 0
-  const passwordOk = gwAuth?.mode === 'password' && (gwAuth?.password ?? '').trim().length > 0
+  const tokenVal = typeof gwAuth?.token === 'string' ? gwAuth.token : (gwAuth?.token ? JSON.stringify(gwAuth.token) : '')
+  const passwordVal = typeof gwAuth?.password === 'string' ? gwAuth.password : (gwAuth?.password ? JSON.stringify(gwAuth.password) : '')
+  const tokenOk = gwAuth?.mode === 'token' && tokenVal.trim().length > 0
+  const passwordOk = gwAuth?.mode === 'password' && passwordVal.trim().length > 0
   const authOk = tokenOk || passwordOk
   checks.push({
     id: 'gateway_auth',

@@ -50,7 +50,8 @@ test.describe('API Index / Discovery', () => {
     const body = await res.json()
 
     expect(body).toHaveProperty('event_stream')
-    expect(body.event_stream.path).toBe('/api/events')
+    expect(body.event_stream.path).toBe('/api/stream')
+    expect(body.event_stream.alias_of).toBe('/api/events')
     expect(body.event_stream.protocol).toBe('SSE')
     expect(typeof body.event_stream.description).toBe('string')
   })
